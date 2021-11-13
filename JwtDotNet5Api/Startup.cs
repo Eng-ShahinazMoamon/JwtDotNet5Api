@@ -1,5 +1,7 @@
 using JwtDotNet5Api.Helper;
 using JwtDotNet5Api.Models;
+using JwtDotNet5Api.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpsPolicy;
@@ -10,10 +12,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace JwtDotNet5Api
@@ -32,10 +36,36 @@ namespace JwtDotNet5Api
         {
             //Configure system
             services.Configure<JWT>(Configuration.GetSection("JWT"));
-            //To explian to system you are using Identity 
+            //To explain to system you are using Identity 
             services.AddIdentity<ApplicationUser, IdentityRole>().AddEntityFrameworkStores<ApplicationDbContext>();
             //Connection String 
             services.AddDbContext<ApplicationDbContext>(o => o.UseSqlServer(Configuration.GetConnectionString("defaultConnection")));
+            //Map IAuth with Auth
+            services.AddScoped<IAuthService, AuthService>();
+            //Add Authontication schema rather than added in every controller 
+            services.AddAuthentication(option=> {
+                option.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                option.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;})
+                //to explain where's key , how to make viladate on it ,
+                //what's need to validate and what's can skip ...all options added here
+                .AddJwtBearer(o=> {
+                    o.RequireHttpsMetadata = false;
+                    o.SaveToken = false;
+                    o.TokenValidationParameters = new TokenValidationParameters {
+                        //here to tell system to validate 
+                        ValidateIssuerSigningKey = true,
+                        ValidateIssuer=true,
+                        ValidateAudience=true,
+                        ValidateLifetime=true,
+                        // here tell system how can get these values
+                        ValidIssuer=Configuration["JWT:Issuer"],
+                        ValidAudience=Configuration["JWT:Audience"],
+                        IssuerSigningKey=new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration["JWT:Key"]))
+                    
+                    
+                    };
+
+                 });
 
             services.AddControllers();
             services.AddSwaggerGen(c =>
@@ -58,6 +88,9 @@ namespace JwtDotNet5Api
             app.UseHttpsRedirection();
 
             app.UseRouting();
+            //Add authentication Must be before Authorization 
+
+            app.UseAuthentication();
 
             app.UseAuthorization();
 
